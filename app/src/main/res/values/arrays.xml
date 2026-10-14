@@ -7,9 +7,20 @@
         <item>@string/resolution_1080p</item>
         <item>@string/resolution_1440p</item>
         <item>@string/resolution_4k</item>
+        <item>@string/resolution_fold8u_inner_land_100</item>
+        <item>@string/resolution_fold8u_inner_land_75</item>
+        <item>@string/resolution_fold8u_inner_land_50</item>
+        <item>@string/resolution_fold8u_inner_port_100</item>
+        <item>@string/resolution_fold8u_inner_port_75</item>
+        <item>@string/resolution_fold8u_inner_port_50</item>
+        <item>@string/resolution_fold8u_cover_land_100</item>
+        <item>@string/resolution_fold8u_cover_land_75</item>
+        <item>@string/resolution_fold8u_cover_land_50</item>
     </string-array>
 
-    <!-- Keep this in sync with PreferenceConfiguration.isNativeResolution()! -->
+    <!-- Keep the standard 16:9 options in sync with PreferenceConfiguration.isNativeResolution()! -->
+    <!-- Device presets are intentionally treated as non-standard (orientation locking, warning dialog). -->
+    <!-- All dimensions must be even. Scaled presets use multiples of 8 at the closest aspect ratio. -->
     <string-array name="resolution_values" translatable="false">
         <item>640x360</item>
         <item>854x480</item>
@@ -17,6 +28,17 @@
         <item>1920x1080</item>
         <item>2560x1440</item>
         <item>3840x2160</item>
+        <!-- Galaxy Z Fold 8 Ultra inner display: 2504x2256 -->
+        <item>2504x2256</item>
+        <item>1856x1672</item>
+        <item>1296x1168</item>
+        <item>2256x2504</item>
+        <item>1672x1856</item>
+        <item>1168x1296</item>
+        <!-- Galaxy Z Fold 8 Ultra cover display: 2520x1080 -->
+        <item>2520x1080</item>
+        <item>1904x816</item>
+        <item>1288x552</item>
     </string-array>
 
     <string-array name="fps_names">

@@ -159,6 +159,22 @@
     <string name="resolution_prefix_native_fullscreen">Native Full-Screen</string>
     <string name="resolution_prefix_native_landscape">(Landscape)</string>
     <string name="resolution_prefix_native_portrait">(Portrait)</string>
+    <string name="resolution_match_display">Match current display (%1$s)</string>
+    <string name="resolution_custom_entry">Custom (%1$s)</string>
+    <string name="resolution_custom_new">Custom resolution…</string>
+    <string name="title_custom_res_dialog">Custom resolution</string>
+    <string name="custom_res_width_hint">Width</string>
+    <string name="custom_res_height_hint">Height</string>
+    <string name="custom_res_separator" translatable="false">×</string>
+    <string name="custom_res_dialog_summary">Enter the stream resolution in pixels. Use even numbers (multiples of 8 are best for video encoders).</string>
+    <string name="custom_res_error_range">Width and height must be between 256 and 8192.</string>
+    <string name="custom_res_error_odd">Width and height must be even numbers.</string>
+    <string name="title_nonstandard_res_dialog">Non-Standard Resolution</string>
+    <string name="text_nonstandard_res_dialog">This resolution does not match a standard 16:9 display mode. Your host will stream its display scaled into this resolution, so unless the host display is set to a mode with the same aspect ratio, you will see black bars inside the video.
+
+For a sharp, full-screen picture, configure a matching custom display mode or virtual display on your host PC.
+
+"Match current display" is measured when the stream starts. Folding, unfolding, or rotating during a stream letterboxes the video until you reconnect.</string>
     <string name="fps_suffix_fps">FPS</string>
     <string name="title_native_fps_dialog">Native FPS Warning</string>
 
@@ -276,6 +292,15 @@
     <string name="resolution_1080p">1080p</string>
     <string name="resolution_1440p">1440p</string>
     <string name="resolution_4k">4K</string>
+    <string name="resolution_fold8u_inner_land_100">Z Fold 8 Ultra inner, landscape (2504x2256)</string>
+    <string name="resolution_fold8u_inner_land_75">Z Fold 8 Ultra inner, landscape 75% (1856x1672)</string>
+    <string name="resolution_fold8u_inner_land_50">Z Fold 8 Ultra inner, landscape 50% (1296x1168)</string>
+    <string name="resolution_fold8u_inner_port_100">Z Fold 8 Ultra inner, portrait (2256x2504)</string>
+    <string name="resolution_fold8u_inner_port_75">Z Fold 8 Ultra inner, portrait 75% (1672x1856)</string>
+    <string name="resolution_fold8u_inner_port_50">Z Fold 8 Ultra inner, portrait 50% (1168x1296)</string>
+    <string name="resolution_fold8u_cover_land_100">Z Fold 8 Ultra cover, landscape (2520x1080)</string>
+    <string name="resolution_fold8u_cover_land_75">Z Fold 8 Ultra cover, landscape 75% (1904x816)</string>
+    <string name="resolution_fold8u_cover_land_50">Z Fold 8 Ultra cover, landscape 50% (1288x552)</string>
 
     <string name="fps_30">30 FPS</string>
     <string name="fps_60">60 FPS</string>

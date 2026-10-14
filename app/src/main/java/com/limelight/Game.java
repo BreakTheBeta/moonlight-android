@@ -99,7 +99,6 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     private long threeFingerDownTime = 0;
 
     private static final int REFERENCE_HORIZ_RES = 1280;
-    private static final int REFERENCE_VERT_RES = 720;
 
     private static final int STYLUS_DOWN_DEAD_ZONE_DELAY = 100;
     private static final int STYLUS_DOWN_DEAD_ZONE_RADIUS = 20;
@@ -498,8 +497,11 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                 touchContextMap[i] = new AbsoluteTouchContext(conn, i, streamView);
             }
             else {
+                // Match the reference height to the stream's aspect ratio so that
+                // horizontal and vertical mouse movement scale equally on non-16:9 streams
                 touchContextMap[i] = new RelativeTouchContext(conn, i,
-                        REFERENCE_HORIZ_RES, REFERENCE_VERT_RES,
+                        REFERENCE_HORIZ_RES,
+                        (int)Math.round((double)REFERENCE_HORIZ_RES * prefConfig.height / prefConfig.width),
                         streamView, prefConfig);
             }
         }
@@ -628,11 +630,25 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         }
     }
 
+    private Rational getPictureInPictureAspectRatio() {
+        // setAspectRatio() throws for ratios outside of 1:2.39 to 2.39:1, which custom
+        // resolutions can exceed, so clamp to the allowed range
+        final double maxRatio = 2.39;
+        double ratio = (double)prefConfig.width / prefConfig.height;
+        if (ratio > maxRatio) {
+            return new Rational(239, 100);
+        }
+        else if (ratio < 1 / maxRatio) {
+            return new Rational(100, 239);
+        }
+        return new Rational(prefConfig.width, prefConfig.height);
+    }
+
     @TargetApi(Build.VERSION_CODES.O)
     private PictureInPictureParams getPictureInPictureParams(boolean autoEnter) {
         PictureInPictureParams.Builder builder =
                 new PictureInPictureParams.Builder()
-                        .setAspectRatio(new Rational(prefConfig.width, prefConfig.height))
+                        .setAspectRatio(getPictureInPictureAspectRatio())
                         .setSourceRectHint(new Rect(
                                 streamView.getLeft(), streamView.getTop(),
                                 streamView.getRight(), streamView.getBottom()));

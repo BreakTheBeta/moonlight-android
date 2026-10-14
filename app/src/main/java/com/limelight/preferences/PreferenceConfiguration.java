@@ -1,12 +1,18 @@
 package com.limelight.preferences;
 
+import android.app.Activity;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.graphics.Point;
+import android.graphics.Rect;
+import android.hardware.display.DisplayManager;
 import android.os.Build;
 import android.preference.PreferenceManager;
+import android.util.DisplayMetrics;
 import android.view.Display;
 
+import com.limelight.R;
 import com.limelight.nvstream.jni.MoonBridge;
 
 public class PreferenceConfiguration {
@@ -122,6 +128,16 @@ public class PreferenceConfiguration {
     public static final String RES_4K = "3840x2160";
     public static final String RES_NATIVE = "Native";
 
+    // Resolved to the current window/display size each time the preferences are read
+    public static final String RES_MATCH_DISPLAY = "match_display";
+    // Only used by the settings UI to open the custom resolution dialog. Never persisted.
+    public static final String RES_CUSTOM = "custom";
+
+    // Limits for custom resolutions. moonlight-common-c rounds odd dimensions down to even
+    // and warns above 8K (or above 4K for H.264).
+    public static final int CUSTOM_RES_MIN = 256;
+    public static final int CUSTOM_RES_MAX = 8192;
+
     public int width, height, fps;
     public int bitrate;
     public FormatOption videoFormat;
@@ -156,6 +172,8 @@ public class PreferenceConfiguration {
     public boolean gamepadTouchpadAsMouse;
     public boolean gamepadMotionSensorsFallbackToDevice;
 
+    // Returns true for any resolution other than the standard 16:9 options. This includes
+    // native, device preset, custom, and match display resolutions.
     public static boolean isNativeResolution(int width, int height) {
         // It's not a native resolution if it matches an existing resolution option
         if (width == 640 && height == 360) {
@@ -236,6 +254,91 @@ public class PreferenceConfiguration {
 
     private static int getHeightFromResolutionString(String resString) {
         return Integer.parseInt(resString.split("x")[1]);
+    }
+
+    // Returns null if the string is not a valid WxH resolution
+    public static Point parseResolutionString(String resString) {
+        String[] parts = resString.split("x");
+        if (parts.length != 2) {
+            return null;
+        }
+
+        try {
+            return new Point(Integer.parseInt(parts[0].trim()), Integer.parseInt(parts[1].trim()));
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    // Returns null if the resolution is acceptable, otherwise the ID of the error string
+    public static Integer validateCustomResolution(int width, int height) {
+        if (width < CUSTOM_RES_MIN || height < CUSTOM_RES_MIN ||
+                width > CUSTOM_RES_MAX || height > CUSTOM_RES_MAX) {
+            return R.string.custom_res_error_range;
+        }
+        else if (width % 2 != 0 || height % 2 != 0) {
+            // 4:2:0 video requires even dimensions
+            return R.string.custom_res_error_odd;
+        }
+
+        return null;
+    }
+
+    // Returns the size of the current window (or display, if we have no window) for the
+    // match display resolution option. Like Game, non-squarish displays are always treated
+    // as landscape. Squarish displays (like an unfolded foldable) keep their current
+    // orientation and Game locks the orientation to match. Multi-window sizes are kept as-is
+    // because the window can't be rotated independently.
+    public static Point getMatchDisplayResolution(Context context) {
+        int width = 0, height = 0;
+        boolean multiWindow = false;
+
+        DisplayManager displayManager = (DisplayManager) context.getSystemService(Context.DISPLAY_SERVICE);
+        Display display = displayManager.getDisplay(Display.DEFAULT_DISPLAY);
+
+        if (context instanceof Activity) {
+            Activity activity = (Activity) context;
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                multiWindow = activity.isInMultiWindowMode();
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                // This tracks multi-window, fold state, and rotation
+                Rect bounds = activity.getWindowManager().getCurrentWindowMetrics().getBounds();
+                width = bounds.width();
+                height = bounds.height();
+            }
+        }
+
+        if (width <= 0 || height <= 0) {
+            DisplayMetrics metrics = new DisplayMetrics();
+            display.getRealMetrics(metrics);
+            width = metrics.widthPixels;
+            height = metrics.heightPixels;
+        }
+
+        if (!multiWindow && !isSquarishScreen(display)) {
+            int longDim = Math.max(width, height);
+            height = Math.min(width, height);
+            width = longDim;
+        }
+
+        // Encoders require even dimensions
+        return new Point(width & ~1, height & ~1);
+    }
+
+    // Converts special resolution values into a WxH resolution string
+    public static String resolveResolutionString(Context context, String resString) {
+        if (RES_MATCH_DISPLAY.equals(resString)) {
+            Point res = getMatchDisplayResolution(context);
+            return res.x + "x" + res.y;
+        }
+        else if (parseResolutionString(resString) == null) {
+            return DEFAULT_RESOLUTION;
+        }
+
+        return resString;
     }
 
     private static String getResolutionString(int width, int height) {
@@ -342,7 +445,7 @@ public class PreferenceConfiguration {
     public static int getDefaultBitrate(Context context) {
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
         return getDefaultBitrate(
-                prefs.getString(RESOLUTION_PREF_STRING, DEFAULT_RESOLUTION),
+                resolveResolutionString(context, prefs.getString(RESOLUTION_PREF_STRING, DEFAULT_RESOLUTION)),
                 prefs.getString(FPS_PREF_STRING, DEFAULT_FPS));
     }
 
@@ -517,10 +620,13 @@ public class PreferenceConfiguration {
             String resStr = prefs.getString(RESOLUTION_PREF_STRING, PreferenceConfiguration.DEFAULT_RESOLUTION);
 
             // Convert legacy resolution strings to the new style
-            if (!resStr.contains("x")) {
+            if (!resStr.contains("x") && !resStr.equals(RES_MATCH_DISPLAY)) {
                 resStr = PreferenceConfiguration.convertFromLegacyResolutionString(resStr);
                 prefs.edit().putString(RESOLUTION_PREF_STRING, resStr).apply();
             }
+
+            // Resolve match display to the current window size and guard against malformed values
+            resStr = resolveResolutionString(context, resStr);
 
             config.width = PreferenceConfiguration.getWidthFromResolutionString(resStr);
             config.height = PreferenceConfiguration.getHeightFromResolutionString(resStr);

@@ -1,10 +1,13 @@
 package com.limelight.preferences;
 
+import android.app.AlertDialog;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
+import android.graphics.Point;
 import android.media.MediaCodecInfo;
 import android.os.Build;
 import android.os.Bundle;
@@ -26,6 +29,8 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
+import android.widget.EditText;
+import android.widget.TextView;
 
 import com.limelight.LimeLog;
 import com.limelight.PcView;
@@ -36,6 +41,8 @@ import com.limelight.utils.UiHelper;
 
 import java.lang.reflect.Method;
 import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 
 public class StreamSettings extends Activity {
     private PreferenceConfiguration previousPrefs;
@@ -122,7 +129,7 @@ public class StreamSettings extends Activity {
     }
 
     public static class SettingsFragment extends PreferenceFragment {
-        private int nativeResolutionStartIndex = Integer.MAX_VALUE;
+        private final Set<String> nativeResolutionValues = new HashSet<>();
         private boolean nativeFramerateShown = false;
 
         private void setValue(String preferenceKey, String value) {
@@ -176,9 +183,7 @@ public class StreamSettings extends Activity {
                 }
             }
 
-            if (pref.getEntryValues().length < nativeResolutionStartIndex) {
-                nativeResolutionStartIndex = pref.getEntryValues().length;
-            }
+            nativeResolutionValues.add(newValue);
             appendPreferenceEntry(pref, newName, newValue);
         }
 
@@ -187,6 +192,120 @@ public class StreamSettings extends Activity {
                 addNativeResolutionEntry(nativeHeight, nativeWidth, insetsRemoved, true);
             }
             addNativeResolutionEntry(nativeWidth, nativeHeight, insetsRemoved, false);
+        }
+
+        private boolean hasEntryValue(ListPreference pref, String value) {
+            for (CharSequence entryValue : pref.getEntryValues()) {
+                if (value.equals(entryValue.toString())) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // Adds a "Custom (WxH)" entry ahead of the trailing "Custom resolution..." entry
+        // if this resolution isn't already in the list
+        private void addCustomResolutionEntry(ListPreference pref, String value) {
+            if (hasEntryValue(pref, value)) {
+                return;
+            }
+
+            appendPreferenceEntry(pref, getResources().getString(R.string.resolution_custom_entry, value), value);
+
+            CharSequence[] entries = pref.getEntries();
+            CharSequence[] values = pref.getEntryValues();
+            int last = values.length - 1;
+            if (last > 0 && PreferenceConfiguration.RES_CUSTOM.equals(values[last - 1].toString())) {
+                // Swap the new entry with the "Custom resolution..." entry so that one stays last
+                CharSequence tmp = entries[last];
+                entries[last] = entries[last - 1];
+                entries[last - 1] = tmp;
+                tmp = values[last];
+                values[last] = values[last - 1];
+                values[last - 1] = tmp;
+                pref.setEntries(entries);
+                pref.setEntryValues(values);
+            }
+        }
+
+        private void addSpecialResolutionEntries() {
+            ListPreference pref = (ListPreference) findPreference(PreferenceConfiguration.RESOLUTION_PREF_STRING);
+
+            Point displayRes = PreferenceConfiguration.getMatchDisplayResolution(getActivity());
+            appendPreferenceEntry(pref,
+                    getResources().getString(R.string.resolution_match_display, displayRes.x + "x" + displayRes.y),
+                    PreferenceConfiguration.RES_MATCH_DISPLAY);
+
+            // Keep a previously saved custom (or no longer present native) resolution selectable
+            String currentValue = pref.getValue();
+            if (currentValue != null && PreferenceConfiguration.parseResolutionString(currentValue) != null) {
+                addCustomResolutionEntry(pref, currentValue);
+            }
+
+            appendPreferenceEntry(pref,
+                    getResources().getString(R.string.resolution_custom_new),
+                    PreferenceConfiguration.RES_CUSTOM);
+        }
+
+        private void showNonStandardResolutionWarning() {
+            Dialog.displayDialog(getActivity(),
+                    getResources().getString(R.string.title_nonstandard_res_dialog),
+                    getResources().getString(R.string.text_nonstandard_res_dialog),
+                    false);
+        }
+
+        private void showCustomResolutionDialog(final ListPreference pref) {
+            View view = LayoutInflater.from(getActivity()).inflate(R.layout.dialog_custom_resolution, null);
+            final EditText widthText = view.findViewById(R.id.custom_res_width);
+            final EditText heightText = view.findViewById(R.id.custom_res_height);
+            final TextView errorText = view.findViewById(R.id.custom_res_error);
+
+            // Start from the currently selected resolution
+            Point current = PreferenceConfiguration.parseResolutionString(
+                    PreferenceConfiguration.resolveResolutionString(getActivity(), pref.getValue()));
+            if (current != null) {
+                widthText.setText(Integer.toString(current.x));
+                heightText.setText(Integer.toString(current.y));
+            }
+
+            final AlertDialog dialog = new AlertDialog.Builder(getActivity())
+                    .setTitle(R.string.title_custom_res_dialog)
+                    .setView(view)
+                    .setPositiveButton(android.R.string.ok, null)
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .create();
+
+            dialog.setOnShowListener(new DialogInterface.OnShowListener() {
+                @Override
+                public void onShow(DialogInterface dialogInterface) {
+                    // Override the positive button so invalid input doesn't dismiss the dialog
+                    dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(new View.OnClickListener() {
+                        @Override
+                        public void onClick(View v) {
+                            Point res = PreferenceConfiguration.parseResolutionString(
+                                    widthText.getText() + "x" + heightText.getText());
+                            Integer error = res == null ? Integer.valueOf(R.string.custom_res_error_range) :
+                                    PreferenceConfiguration.validateCustomResolution(res.x, res.y);
+                            if (error != null) {
+                                errorText.setText(error);
+                                errorText.setVisibility(View.VISIBLE);
+                                return;
+                            }
+
+                            String value = res.x + "x" + res.y;
+                            addCustomResolutionEntry(pref, value);
+                            pref.setValue(value);
+                            resetBitrateToDefault(PreferenceManager.getDefaultSharedPreferences(getActivity()), value, null);
+                            dialog.dismiss();
+
+                            if (PreferenceConfiguration.isNativeResolution(res.x, res.y)) {
+                                showNonStandardResolutionWarning();
+                            }
+                        }
+                    });
+                }
+            });
+            dialog.show();
         }
 
         private void addNativeFrameRateEntry(float framerate) {
@@ -253,6 +372,7 @@ public class StreamSettings extends Activity {
             if (res == null) {
                 res = prefs.getString(PreferenceConfiguration.RESOLUTION_PREF_STRING, PreferenceConfiguration.DEFAULT_RESOLUTION);
             }
+            res = PreferenceConfiguration.resolveResolutionString(getActivity(), res);
             if (fps == null) {
                 fps = prefs.getString(PreferenceConfiguration.FPS_PREF_STRING, PreferenceConfiguration.DEFAULT_FPS);
             }
@@ -521,6 +641,9 @@ public class StreamSettings extends Activity {
                 addNativeResolutionEntries(width, height, false);
             }
 
+            // These must come after the native entries
+            addSpecialResolutionEntries();
+
             if (!PreferenceConfiguration.readPreferences(this.getActivity()).unlockFps) {
                 // We give some extra room in case the FPS is rounded down
                 if (maxSupportedFps < 118) {
@@ -619,23 +742,26 @@ public class StreamSettings extends Activity {
                     SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(SettingsFragment.this.getActivity());
                     String valueStr = (String) newValue;
 
-                    // Detect if this value is the native resolution option
-                    CharSequence[] values = ((ListPreference)preference).getEntryValues();
-                    boolean isNativeRes = true;
-                    for (int i = 0; i < values.length; i++) {
-                        // Look for a match prior to the start of the native resolution entries
-                        if (valueStr.equals(values[i].toString()) && i < nativeResolutionStartIndex) {
-                            isNativeRes = false;
-                            break;
-                        }
+                    // The custom option opens a dialog that sets the real value
+                    if (PreferenceConfiguration.RES_CUSTOM.equals(valueStr)) {
+                        showCustomResolutionDialog((ListPreference) preference);
+                        return false;
                     }
 
+                    Point res = PreferenceConfiguration.parseResolutionString(
+                            PreferenceConfiguration.resolveResolutionString(getActivity(), valueStr));
+
                     // If this is native resolution, show the warning dialog
-                    if (isNativeRes) {
+                    if (nativeResolutionValues.contains(valueStr)) {
                         Dialog.displayDialog(getActivity(),
                                 getResources().getString(R.string.title_native_res_dialog),
                                 getResources().getString(R.string.text_native_res_dialog),
                                 false);
+                    }
+                    // Device presets, custom, and match display resolutions may not be 16:9
+                    else if (PreferenceConfiguration.RES_MATCH_DISPLAY.equals(valueStr) ||
+                            PreferenceConfiguration.isNativeResolution(res.x, res.y)) {
+                        showNonStandardResolutionWarning();
                     }
 
                     // Write the new bitrate value
